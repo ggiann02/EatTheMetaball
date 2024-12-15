@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Metaballs</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sniglet:wght@400;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            min-height: 100vh;
+            flex-direction: column;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .game-container {
+            position: relative;
+            width: min(90vw, 90vh);
+            height: min(90vw, 90vh);
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 20px;
+            border: 2px solid palevioletred;
+        }
+
+        .score {
+            color: white;
+            font-family: "Sniglet", system-ui;
+            font-weight: 300;
+            font-style: normal;
+            background-color: palevioletred;
+            padding: 20px;
+            font-size: min(4vw, 40px);
+            z-index: 100;
+            border-radius: 20px;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+        }
+
+        .control {
+            color: white;
+            font-family: "Sniglet", system-ui;
+            background-color: palevioletred;
+            padding: 10px;
+            font-size: min(2vw, 20px);
+            z-index: 100;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            position: absolute;
+            top: 20px;
+            left: 20px;
+        }
+
+        .control-color {
+            color: white;
+            font-family: "Sniglet", system-ui;
+            background-color: palevioletred;
+            padding: 10px;
+            font-size: min(2vw, 20px);
+            z-index: 100;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            position: absolute;
+            top: 140px;
+            left: 20px;
+        }
+
+        .control label {
+            display: block;
+            cursor: pointer;
+        }
+
+        .control input {
+            width: min(20vw, 200px);
+            margin-top: 5px;
+        }
+
+        .control label {
+            display: block;
+        }
+
+        .title-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            z-index: 200;
+            font-family: "Sniglet", system-ui;
+            color: white;
+            cursor: pointer;
+        }
+
+        .title-screen h1{
+            font-size: min(8vw, 80px);
+            text-align: center;
+            margin: 0;
+        }
+
+        .title-screen p{
+            font-size: min(3vw, 30px);
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        #intervalValue {
+            text-align: center;
+        }
+
+        .button-container {
+            padding-top: 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+        }
+
+        #StartButton {
+            padding: 10px;
+            width: 30%;
+            display: flex;
+            justify-content: center;
+            font-family: "Sniglet", system-ui;
+            font-size: min(2vw, 20px);
+            position: absolute;
+            text-transform: uppercase;
+            border-radius: 30px;
+
+        }
+
+        #StartButton:hover {
+            background-color: black;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="title-screen" id="titleScreen">
+            <h1>Eat the Metaballs</h1>
+            <p>Collect all the metaballs!</p>
+            <p>Beware of the evil white metaball!</p>
+            <div class="button-container">
+            <input id="StartButton" type="button" value="Start"/>
+            </div>
+        </div>
+        <div id="score" class="score">Score: 0</div>
+        <div class="control">
+            <label for="spawnInterval">Spawn Interval (ms):</label>
+            <input type="range" id="spawnInterval" min="500" max="10000" step="500" value="5000">
+            <span id="intervalValue">5000</span>
+        </div>
+        <div class="control-color">
+            <label>Color</label>
+            <label>
+                <input type="radio" id="color1" name="colorScheme" value="barbie" checked>
+            Barbie
+            </label>
+            <label>
+                <input type="radio" id="color2" name="colorScheme" value="monster">
+            Monster Mash
+            </label>
+            <label>
+                <input type="radio" id="color3" name="colorScheme" value="ocean">
+            Ocean
+            </label>
+            <label>
+                <input type="radio" id="color4" name="colorScheme" value="neon">
+            Neon
+            </label>
+            <label>
+                <input type="radio" id="color5" name="colorScheme" value="autumn">
+            Autumn Leaves
+            </label>
+        </div>
+
+        <canvas id="glCanvas"></canvas>
+    </div>
+    <script>
+        const MAX_SIZE = 100;
+        let currMetaballs = 4;
+        let score = 0;
+        let lastSpawn = Date.now();
+        let SPAWN_INTERVAL = 5000;
+
+        const velocities = [];
+        const MULTIPLIER = 0.01;
+
+        let gameStarted = false;
+
+        const startButton = document.getElementById('StartButton');
+        const titleScreen = document.getElementById('titleScreen');
+
+        startButton.addEventListener('click', () => {
+            titleScreen.style.display = 'none';
+            gameStarted = true;
+            lastSpawn = Date.now();
+            $("#titleScreen").hide();
+        })
+        
+        const canvas = document.getElementById('glCanvas');
+        const gl = canvas.getContext('webgl');
+
+        function resizeCanvas() {
+            const container = document.querySelector('.game-container');
+            const size = Math.min(container.offsetWidth, container.offsetHeight);
+            canvas.width = size;
+            canvas.height = size;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+
+        // Initial resize
+        resizeCanvas();
+
+        // Add resize listener
+        window.addEventListener('resize', resizeCanvas);
+
+        let currColorScheme = 'barbie';
+
+        // event listener for radio buttons
+        document.querySelectorAll('input[name="colorScheme"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                currColorScheme = e.target.value;
+                metaballStates.forEach(ball => {
+                    if (!ball.evil) {
+                        ball.color = getRandomColor();
+                    }
+                })
+            }  )
+        })
+
+        const spawnIntervalSlider = document.getElementById('spawnInterval');
+        const intervalValueDisplay = document.getElementById('intervalValue');
+
+        spawnIntervalSlider.addEventListener('input', (e) => {
+            SPAWN_INTERVAL = parseInt(e.target.value, 10);
+            intervalValueDisplay.textContent = SPAWN_INTERVAL;
+            lastSpawn = Date.now();
+        });
+
+        let mousePos = [0.5, 0.5];
+        let time = 0;
+
+        function initializeVelocities() {
+            for (let i = 0; i < MAX_SIZE; i++) {
+                velocities[i] = {
+                    x: (Math.random() - 0.5) * MULTIPLIER, 
+                    y: (Math.random() - 0.5) * MULTIPLIER
+                };
+            };
+        }
+
+        initializeVelocities();
+
+        function updateVelocities(index) {
+            if (Math.random() < 0.01) {
+                velocities[index] = {
+                    x: (Math.random() - 0.5) * MULTIPLIER, 
+                    y: (Math.random() - 0.5) * MULTIPLIER
+                };
+            }
+        }
+
+        function getRandomColor() {
+            let r;
+            let g;
+            let b;
+            switch (currColorScheme) {
+                case 'barbie' :
+                    r = 0.5 + Math.random() * 0.4; 
+                    g = 0.01 + Math.random() * 0.4;
+                    b = 0.3 + Math.random() * 0.4; 
+                    break;
+                case 'monster' :
+                    r = 0.001 + Math.random() * 0.4;  // Red between 0.3 and 0.7
+                    g = 0.5 + Math.random() * 0.4;  // Green between 0.2 and 0.6
+                    b = 0.1 + Math.random() * 0.4;
+                    break;
+                case 'ocean' :
+                    r = 0.01 + Math.random() * 0.4;  // Red between 0.3 and 0.7
+                    g = 0.3 + Math.random() * 0.4;  // Green between 0.2 and 0.6
+                    b = 0.5 + Math.random() * 0.4;
+                    break;
+                case 'neon' :
+                    const neonPalette = [
+                    [1.0, 0.0, 1.0],    // Hot Pink
+                    [0.0, 1.0, 0.5],    // Neon Green
+                    [0.0, 1.0, 1.0],    // Cyan
+                    [1.0, 1.0, 0.0],    // Yellow
+                    [1.0, 0.0, 0.0],    // Red
+                    [0.5, 0.0, 1.0],    // Purple
+                    [1.0, 0.5, 0.0]     // Orange
+                    ];
+                    return neonPalette[Math.floor(Math.random() * neonPalette.length)];
+                case 'autumn' :
+                    r = 0.5 + Math.random() * 0.4; 
+                    g = 0.2 + Math.random() * 0.4;
+                    b = 0.00001 + Math.random() * 0.4; 
+                    break;
+                default:
+                    r = 0.3 + Math.random() * 0.4;
+                    g = 0.2 + Math.random() * 0.4;
+                    b = 0.5 + Math.random() * 0.4;
+                    break;
+            }
+            
+            return [r, g, b];
+        }
+
+        function getRandomRadius() {
+            return Math.random() * (0.09 - 0.03) + 0.02;
+        }
+
+        function updateScore() {
+            const scoreElement = document.getElementById('score');
+            scoreElement.innerHTML = `Score: ${score}`;
+        }
+        
+        let metaballStates = [
+            { following: true, evil: false, position: [0.5, 0.5], color: getRandomColor(), radius: 0.09},
+            { following: false, evil: true, position: [0.4, 0.6], color: [1.0, 1.0, 1.0], radius: 0.05 },
+            { following: false, evil: false, position: [0.1, 0.2], color: getRandomColor(), radius: getRandomRadius() },
+            { following: false, evil: false, position: [0.9, 0.7], color: getRandomColor(), radius: getRandomRadius() }
+        ];
+
+        function gameOver() {
+            alert('Game Over! Score: ' + score);
+            location.reload();
+        }
+
+        function spawnMetaball() {
+            if (currMetaballs >= MAX_SIZE) return;
+            
+            const randX = Math.random() * (0.94 - 0.06) + 0.06;
+            const randY = Math.random() * (0.94 - 0.06) + 0.06;
+
+            metaballStates.push({
+                following: false,
+                evil: false,
+                position: [randX, randY],
+                color: getRandomColor(),
+                radius: getRandomRadius()
+            });
+
+            currMetaballs++;
+        }
+        
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width;
+            const y = 1.0 - (e.clientY - rect.top) / rect.height;
+            
+            mousePos = [x, y];
+            
+            metaballStates.forEach(ball => {
+                if (ball.following) {
+                    ball.position = mousePos;
+                }
+            });
+            
+            const threshold = 0.05;
+            for (let i = 1; i < metaballStates.length; i++) {
+                if (!metaballStates[i].following) {
+                    const dx = metaballStates[0].position[0] - metaballStates[i].position[0];
+                    const dy = metaballStates[0].position[1] - metaballStates[i].position[1];
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < threshold) {
+                        if (metaballStates[i].evil) {
+                            //score = 0;
+                            updateScore();
+                            gameOver();
+                            return;
+                        }
+                        score += Math.round(metaballStates[i].radius * 10000);
+                        updateScore();
+                        metaballStates[0].radius += 0.2 * metaballStates[i].radius;
+                        metaballStates[i].following = true;
+                    }
+                }
+            }
+        });
+
+        const vertexShaderSource = `
+            attribute vec4 position;
+            void main() {
+                gl_Position = position;
+            }
+        `;
+
+        const fragmentShaderSource = `
+            precision mediump float;
+            uniform vec2 resolution;
+            uniform vec2 ballPositions[${MAX_SIZE}];
+            uniform vec3 ballColors[${MAX_SIZE}];
+            uniform float ballRadius[${MAX_SIZE}];
+            uniform float time;
+            uniform int numOfMetaballs;
+            uniform bool isNeon;
+
+            float hash(vec2 p) {
+                return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+            }
+
+            float noise(vec2 p) {
+                vec2 i = floor(p);
+                vec2 f = fract(p);
+                vec2 u = f * f * (3.0 - 2.0 * f);
+
+                return mix(
+                    mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+                    mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+                    u.y
+                );
+            }
+
+            struct Metaball {
+                vec2 position;
+                float radius;
+                vec3 color;
+            };
+            
+            Metaball createMetaball(vec2 position, float radius, vec3 color) {
+                Metaball ball;
+                ball.position = position;
+                ball.radius = radius;
+                ball.color = color;
+                return ball;
+            }
+            
+            vec4 calculateStrength(vec2 p, Metaball metaball) {
+                float r = metaball.radius * metaball.radius;
+                vec2 diff = p - metaball.position;
+
+                float d2 = dot(diff, diff);
+                float strength = r / d2;
+
+                return vec4(metaball.color * strength, strength);
+            }
+
+            void main() {
+                vec2 p = gl_FragCoord.xy / resolution.xy;
+
+                float totalStrength = 0.0;
+                vec3 totalColor = vec3(0.0);
+
+                for (int i = 0; i < ${MAX_SIZE}; i++) {
+                    if (i >= numOfMetaballs) break;
+                    Metaball ball = createMetaball(ballPositions[i], ballRadius[i], ballColors[i]);
+                    
+                    vec4 str = calculateStrength(p, ball);
+                    totalStrength += str.w;
+                    //totalColor += str.rgb;
+
+                    float noiseEffect = noise(p * 10.0 + time * 0.1); 
+                    vec3 noiseColor = mix(ball.color, vec3(1.0), noiseEffect);
+                    totalColor += noiseColor * str.rgb;
+                }
+                    
+                vec3 color = vec3(0.0);
+                if (totalStrength > 1.0) {
+                    float glow = 0.7;
+                    if (isNeon) {
+                        glow = 1.5;
+                    } else {
+                        glow = 0.7;
+                    }
+
+                    color = totalColor / totalStrength;
+                    color *= 1.0 + glow * smoothstep(1.0, 2.0, totalStrength);
+                }
+                
+                gl_FragColor = vec4(color, 1.0);
+            }
+        `;
+
+        function createShader(type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        const vertexShader = createShader(gl.VERTEX_SHADER, vertexShaderSource);
+        const fragmentShader = createShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error(gl.getProgramInfoLog(program));
+        }
+
+        const positions = new Float32Array([
+            -1, -1,
+            1, -1,
+            -1, 1,
+            1, 1
+        ]);
+
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+
+        const positionLocation = gl.getAttribLocation(program, 'position');
+        const resolutionLocation = gl.getUniformLocation(program, 'resolution');
+        const ballPositionsLocation = gl.getUniformLocation(program, 'ballPositions');
+        const numMetaballs = gl.getUniformLocation(program, 'numOfMetaballs');
+        const colorLocation = gl.getUniformLocation(program, 'ballColors');
+        const timeLocation = gl.getUniformLocation(program, 'time');
+        const radiusLocation = gl.getUniformLocation(program, 'ballRadius')
+        const isNeonLocation = gl.getUniformLocation(program, 'isNeon')
+
+        gl.enableVertexAttribArray(positionLocation);
+        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+        function render() {
+            if (!gameStarted) {
+                requestAnimationFrame(render);
+                return;
+            }
+            time += 0.01;
+            const now = Date.now();
+            if (now - lastSpawn >= SPAWN_INTERVAL) {
+                spawnMetaball();
+                lastSpawn = now;
+            }
+
+            metaballStates.forEach((ball, index) => {
+                if (!ball.following && index > 0) {
+                    let newX = ball.position[0] + velocities[index].x;
+                    let newY = ball.position[1] + velocities[index].y;
+                    
+                    if (newX >= 0.95 || newX <= 0.05) {
+                        velocities[index].x *= -1;
+                        newX = ball.position[0] + velocities[index].x;
+                    }
+                    
+                    if (newY >= 0.95 || newY <= 0.05) {
+                        velocities[index].y *= -1;
+                        newY = ball.position[1] + velocities[index].y;
+                    }
+                    
+                    ball.position[0] = newX;
+                    ball.position[1] = newY;
+                    
+                    updateVelocities(index);
+                }
+            });
+            
+            const positions = new Float32Array(
+                metaballStates.flatMap(ball => ball.position)
+            );
+
+            const colors = new Float32Array(
+                metaballStates.flatMap(ball => ball.color || [1,1,1])
+            );
+
+            const radius = new Float32Array(
+                metaballStates.flatMap(ball => ball.radius)
+            );
+            
+            gl.useProgram(program);
+            gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
+            gl.uniform2fv(ballPositionsLocation, positions);
+            gl.uniform1f(timeLocation, time);
+            gl.uniform1i(numMetaballs, currMetaballs);
+            gl.uniform3fv(colorLocation, colors);
+            gl.uniform1fv(radiusLocation, radius);
+            gl.uniform1i(isNeonLocation, currColorScheme === 'neon' ? 1 : 0);
+            
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+            
+            requestAnimationFrame(render);
+        }
+
+        render();
+    </script>
+</body>
+</html>
